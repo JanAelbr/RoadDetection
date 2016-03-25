@@ -12,7 +12,7 @@ using namespace cv;
 
 int main()
 {
-	String filename = "C:\\School\\5e Jaar\\Computervisie\\images\\clouds";
+	String filename = "../../../images/01/frame00000";
 	String ext = ".png";
 
 	Mat image1;	//read image
