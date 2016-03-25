@@ -101,12 +101,12 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>C:\Project_ComputerVisie\opencv\my_build\install\include\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\opencv\my_build\install\include\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\Project_ComputerVisie\opencv\my_build\install\x64\vc14\lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>..\..\opencv\my_build\install\x64\vc14\lib</AdditionalLibraryDirectories>
       <AdditionalDependencies>opencv_core310d.lib;opencv_highgui310d.lib;opencv_imgproc310d.lib;opencv_imgcodecs310d.lib;opencv_video310d.lib;opencv_videoio310d.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
