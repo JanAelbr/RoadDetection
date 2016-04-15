@@ -27,7 +27,7 @@ void print_enkel_mask(string filename, string maskname, string ext, string numbe
 	Canny(image, contour, 50, 150);
 	namedWindow("window", 1);
 	//imshow("window", image);
-	imshow("window", contour);
+	imshow("window", contour - contour_mask);
 	waitKey();
 	
 }
