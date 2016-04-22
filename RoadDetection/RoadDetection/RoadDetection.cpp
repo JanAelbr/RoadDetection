@@ -13,13 +13,13 @@ using namespace std;
 using namespace cv;
 
 
-const int OUR_MAX_SPEED = 88;
-const int THRESHOLD_90 = 30;
+const int OUR_MAX_SPEED = 90;
+const int THRESHOLD_90 = 75;
 static int false_positive_90 = 0;
 static int true_positive_90 = 0;
 static int false_negative_90 = 0;
 static int true_negative_90 = 0;
-const bool USING_THREADS = false;
+const bool USING_THREADS = true;
 
 double bepaal_rico_weg(Mat & m, Point & p1, Point & p2, bool & goes_overboard) { // GEEF IMAGE MEE EN 2 POINTS, GEWOON LEGE POINTS
 	Point y1, y2, x1, x2;
@@ -108,6 +108,11 @@ void print_enkel_mask(string filename, string maskname, string ext, string numbe
 	image = imread(filename + ext, CV_LOAD_IMAGE_COLOR);
 	mask = imread(maskname + ext, CV_LOAD_IMAGE_COLOR);
 	//imshow("original", image + mask);
+	Mat M = Mat::ones(10, 20, CV_32F);
+	dilate(mask, mask, M);
+	//imshow("new mask", image + mask);
+	//waitKey();
+	
 	//cout << mask << endl << endl;
 	Mat original_mask = mask.clone();
 	threshold(mask, mask, 1, 255, 0);
@@ -129,9 +134,12 @@ void print_enkel_mask(string filename, string maskname, string ext, string numbe
 	split(cannied_masked_image, channels);
 	Scalar m = mean(channels[0]);
 	double aantal_pixels = m[0] * cannied_masked_image.rows * cannied_masked_image.cols / 255;
+	/*if (oplossing >= OUR_MAX_SPEED) {
+		cout << "Aantal pixel: " << aantal_pixels << "\tOplossing: " << oplossing << endl;
+		imshow("output", cannied_masked_image);
+		waitKey();
+	}*/
 	
-	//cout << aantal_pixels << endl;
-	//imshow("output", cannied_masked_image);
 	
 
 	if (aantal_pixels <= THRESHOLD_90) { // WE SAY 90
@@ -139,12 +147,9 @@ void print_enkel_mask(string filename, string maskname, string ext, string numbe
 			//cout << "Oplossing : " << oplossing << " Verkeerd toegelaten\n";
 			cout << "Oplossing: " << oplossing << "\tAantal pixels: " << aantal_pixels << " File: " << filename << endl;
 			string windowname = filename;
-			windowname += " ";
-			windowname += oplossing;
-			windowname += " ";
-			windowname += aantal_pixels;
-			imshow(windowname, image + original_mask);
+			imshow(filename, cannied_masked_image);
 			false_positive_90++; // SHOULD BE ZERO OR ELSE WE CRASH
+			
 			waitKey();
 		}
 		else { //SOLUTION SAYS 90
