@@ -13,168 +13,264 @@ using namespace std;
 using namespace cv;
 
 
-const int OUR_MAX_SPEED = 90;
-const int THRESHOLD_90 = 75;
+const int OUR_SPEED_90 = 90;
+const int OUR_SPEED_70 = 70;
+const int INITIAL_THRESHOLD_90 = 75;
+const int INITIAL_THRESHOLD_70 = 150;
 static int false_positive_90 = 0;
 static int true_positive_90 = 0;
 static int false_negative_90 = 0;
 static int true_negative_90 = 0;
-const bool USING_THREADS = true;
+static int false_positive_70 = 0;
+static int true_positive_70 = 0;
+static int false_negative_70 = 0;
+static int true_negative_70 = 0;
+const bool USING_THREADS = false;
+ofstream file;
 
-double bepaal_rico_weg(Mat & m, Point & p1, Point & p2, bool & goes_overboard) { // GEEF IMAGE MEE EN 2 POINTS, GEWOON LEGE POINTS
+bool goes_overboard(string maskname) {
+	Mat mask = imread(maskname, CV_LOAD_IMAGE_UNCHANGED);
+	mask.convertTo(mask, CV_32S);
+	int aantal_rijen = mask.rows;
+	bool goes_overboard = false;
+	int i = 0;
+	while (!goes_overboard && i < aantal_rijen - 1) {
+		if (mask.at<int>(i, 0) != 0 || mask.at<int>(i, mask.cols - 1) != 0) {
+			goes_overboard = true;
+		}
+		i++;
+	}
+	return goes_overboard;
+};
+
+double bepaal_rico_weg(Mat m, Point & p1, Point & p2) {
+	bool rand;
 	Point y1, y2, x1, x2;
-	goes_overboard = false;
+	rand = false;
 	bool y1found = false, y2found = false, x1found = false, x2found = false;
-	for (int i = 0; i<m.rows; i++) {
-		if (m.at<float>(m.cols - 1, i) != 0 && !y1found) {//laatste colom overlopen eerste coordinaat;
+	m.convertTo(m, CV_32S);
+	for (int i = 0; i < m.rows; i++) {
+		if (m.at<int>(i, m.cols - 1) != 0 && !y1found) {//laatste kolom overlopen eerste coordinaat;
 			y1found = true;
-			y1.y = i;
-			y1.x = m.rows;
+			y1 = Point(m.cols - 1, i);
+			rand = true;
 		}
-		else {
-			if (m.at<float>(m.cols - 1, i) == 0 && !y2found) { //laatste colom overlopen tweede coordinaat;
-				y2found = true;
-				y2.y = i;
-				y2.x = m.rows;
+		int teller = i;
+		if (y1found) {
+			while (!y2found && teller < m.rows) {
+
+				if (m.at<int>(teller, m.cols - 1) == 0 && !y2found && y1found) { //laatste kolom overlopen tweede coordinaat;
+					y2found = true;
+					y2 = Point(m.cols - 1, teller);
+				}
+				teller++;
 			}
-		}
-		if (m.at<float>(0, i) != 0 && !y1found) { //eerste colom overlopen eerste coordinaat;
-			y1found = true;
-			y1.y = i;
-			y1.x = m.rows;
-		}
-		else {
-			if (m.at<float>(0, i) == 0 && !y2found) { //eerste colom overlopen tweede coordinaat;
-				y2found = true;
-				y2.y = i;
-				y2.x = m.rows;
-			}
+			i = m.rows;
 		}
 	}
 
-	for (int i = 0; i<m.cols; i++) { //laatste rij overlopen
-		if (m.at<float>(i, m.rows - 1) != 0 && !x1found) {
+	if (!y1found && !y2found)
+		for (int i = 0; i < m.rows; i++) {
+			if (m.at<int>(i, 0) != 0 && !y1found) {//laatste kolom overlopen eerste coordinaat;
+				y1found = true;
+				y1 = Point(0, i);
+				rand = true;
+			}
+			int teller = i;
+			if (y1found) {
+				while (!y2found && teller < m.rows) {
+
+					if (m.at<int>(teller, 0) == 0 && !y2found && y1found) { //laatste kolom overlopen tweede coordinaat;
+						y2found = true;
+						y2 = Point(0, teller);
+					}
+					teller++;
+				}
+				i = m.rows;
+			}
+		}
+
+	for (int i = 0; i<m.cols; i++) {
+		if (m.at<int>(m.rows - 1, i) != 0 && !x1found) {//laatste rij overlopen eerste coordinaat;
 			x1found = true;
-			x1.x = i;
-			x1.y = m.rows;
+			x1 = Point(i, m.rows - 1);
 		}
-		else {
-			if (m.at<float>(i, m.rows - 1) == 0 && !x2found) {
-				x2found = true;
-				x2.x = i;
-				x2.y = m.rows;
+		int teller = i;
+		if (x1found) {
+			while (!x2found) {
+
+				if (m.at<int>(m.rows - 1, teller) == 0 && !x2found && x1found) { //laatste rij overlopen tweede coordinaat;
+					x2found = true;
+					x2 = Point(teller, m.rows - 1);
+				}
+				teller++;
 			}
+			i = m.cols;
 		}
 	}
-	if (y1found && y2found && x1found && x2found) {
-		Point bocht = Point(m.rows - 1, y2.y - y1.y);
-		Point begin = Point(x2.x - x1.x, m.rows - 1);
-		goes_overboard = true;
 
-		return (double)(bocht.y - begin.y) / (double)(bocht.x - begin.x);
+	if (y1found && y2found && x1found && x2found) {
+		Point bocht = Point(m.cols - 1, (y2.y + y1.y) / 2);
+		Point begin = Point((x2.x + x1.x) / 2, m.rows - 1);
+		double x = (double)(bocht.y - begin.y) / (double)(bocht.x - begin.x);
+		return 1 / x;
 	}
 	else {
-		int _col = 0;
-		int _row = 0;
-		while (m.at<float>(_row, _col) == 0) {
-			_col++;
+		int _col = 0, _row = 0;
+		while (m.at<int>(_row, _col) == 0) {
 			if (_col == m.cols) {
 				_col = 0;
 				_row++;
 			}
+			_col++;
 		}
-		p1 = Point(_row, _col);
-		while (m.at<float>(_row, _col) != 0) {
+		p1 = Point(_col, _row);
+		while (m.at<int>(_row, _col) != 0) {
 			_col++;
 		}
 		if (_col == m.cols) { //return thesame pixel when only one on a line
 			p2 = Point(p1);
-			return -1;
+			Point bocht = Point(p2.x, p2.y);
+			Point begin = Point(x2.x - x1.x, m.rows - 1);
+			return -(double)(bocht.y - begin.y) / (double)(bocht.x - begin.x);
 		}
 		else { // return other pixel on the row where the road ends
-			p2 = Point(_row, _col);
-			Point bocht = Point(p2.x - p1.x, p2.y);
-			Point begin = Point(x2.x - x1.x, m.rows - 1);
 
-			return (double)(bocht.y - begin.y) / (double)(bocht.x - begin.x);
+			p2 = Point(_col, _row);
+			Point bocht = Point((p2.x + p1.x) / 2, p2.y);
+			Point begin = Point(x2.x - x1.x, m.rows - 1);
+			double ric = (double)(bocht.y - begin.y) / (double)(bocht.x - begin.x);
+			return 1 / ric;
 
 		}
 	}
 };
 
-
 void print_enkel_mask(string filename, string maskname, string ext, string number, int oplossing) {
-	Mat image, mask;	//read image
-	image = imread(filename + ext, CV_LOAD_IMAGE_COLOR);
-	mask = imread(maskname + ext, CV_LOAD_IMAGE_COLOR);
-	//imshow("original", image + mask);
-	Mat M = Mat::ones(10, 20, CV_32F);
-	dilate(mask, mask, M);
-	//imshow("new mask", image + mask);
-	//waitKey();
-	
-	//cout << mask << endl << endl;
-	Mat original_mask = mask.clone();
-	threshold(mask, mask, 1, 255, 0);
-	//imshow("window", mask);
-	//waitKey();
-	Mat contour_mask;
-	Canny(mask, contour_mask, 50, 150);
-	//imshow("window", contour_mask);
-	//waitKey();
-	Mat cutout_image;
-	bitwise_and(image, mask, cutout_image);
-	Mat contour;
-	Canny(cutout_image, contour, 50, 150);
-	//imshow("window", image);
-	Mat cannied_masked_image = contour - contour_mask;
-	
+	if (!goes_overboard(maskname + ext)) {
+		int THRESHOLD_90 = INITIAL_THRESHOLD_90;
+		Mat image, mask;	//read image
+		image = imread(filename + ext, CV_LOAD_IMAGE_COLOR);
+		mask = imread(maskname + ext, CV_LOAD_IMAGE_COLOR);
+		//imshow("original", image + mask);
+		Mat M = Mat::ones(10, 20, CV_32F);
+		dilate(mask, mask, M);
+		//imshow("new mask", image + mask);
+		//waitKey();
 
-	vector<Mat> channels;
-	split(cannied_masked_image, channels);
-	Scalar m = mean(channels[0]);
-	double aantal_pixels = m[0] * cannied_masked_image.rows * cannied_masked_image.cols / 255;
-	/*if (oplossing >= OUR_MAX_SPEED) {
-		cout << "Aantal pixel: " << aantal_pixels << "\tOplossing: " << oplossing << endl;
-		imshow("output", cannied_masked_image);
+		//cout << mask << endl << endl;
+		Mat original_mask = mask.clone();
+		threshold(mask, mask, 1, 255, 0);
+		//imshow("window", mask);
+		//waitKey();
+		Mat contour_mask;
+
+		Canny(mask, contour_mask, 50, 150);
+		//imshow("window", contour_mask);
+		//waitKey();
+		Mat cutout_image;
+		bitwise_and(image, mask, cutout_image);
+		//imshow("cutout", cutout_image);
+		//waitKey();
+		Mat contour;
+		Canny(cutout_image, contour, 50, 150);
+		//imshow("window", image);
+		Mat cannied_masked_image = contour - contour_mask;
+		//imshow("final image", cannied_masked_image);
+		//waitKey();
+
+		//double rico = bepaal_rico_weg(original_mask, Point(), Point());
+		//rico = abs(1 / rico);
+		//rico /= 0.35;
+		//cout << "Gewicht: " << rico << endl;
+		//imshow("rico", original_mask);
+		//if (rico > 1) {
+			//THRESHOLD_90 = THRESHOLD_90 * rico;
+			//cout << "Gewicht: " << rico << endl;
+		//}
+		//cout << "Rico: " << THRESHOLD_90 << endl;
+		//waitKey();
+		//imshow("mask", mask);
+		//waitKey();
+
+
+		
+
+		//vector<vector<Point> > contours;
+		//vector<Vec4i> hierarchy;
+		//imshow("Final Image before", cannied_masked_image);
+		//findContours(cannied_masked_image, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+		//Scalar color(255,255,255);
+		//for (int i = 0; i < contours.size();i++) {
+		//	if (contours[i].size() > 100) {
+		//		drawContours(cannied_masked_image, contours, i, color, CV_FILLED, 8, hierarchy);
+		//	}
+		//}
+
+		vector<Mat> channels;
+		split(cannied_masked_image, channels);
+		Scalar m = mean(channels[0]);
+		double aantal_pixels = m[0] * cannied_masked_image.rows * cannied_masked_image.cols / 255;
+
+
+		//imshow("Final Image after", cannied_masked_image);
+		//cout << "Aantal pixels: " << aantal_pixels << endl;
 		waitKey();
-	}*/
-	
-	
 
-	if (aantal_pixels <= THRESHOLD_90) { // WE SAY 90
-		if (oplossing < OUR_MAX_SPEED) { // SOLUTION SAYS NOT 90
-			//cout << "Oplossing : " << oplossing << " Verkeerd toegelaten\n";
-			cout << "Oplossing: " << oplossing << "\tAantal pixels: " << aantal_pixels << " File: " << filename << endl;
-			string windowname = filename;
-			imshow(filename, cannied_masked_image);
-			false_positive_90++; // SHOULD BE ZERO OR ELSE WE CRASH
-			
-			waitKey();
+		file << aantal_pixels << ";" << oplossing << ";";
+
+		if (aantal_pixels <= THRESHOLD_90) { // WE SAY 90
+			if (oplossing < OUR_SPEED_90) { // SOLUTION SAYS NOT 90
+											//cout << "Oplossing : " << oplossing << " Verkeerd toegelaten\n";
+											//cout << "Oplossing: " << oplossing << "\tAantal pixels: " << aantal_pixels << " File: " << filename << "Threshold: " << THRESHOLD_90 << endl;
+				string windowname = filename;
+				imshow(filename, cannied_masked_image);
+				false_positive_90++; // SHOULD BE ZERO OR ELSE WE CRASH
+
+				waitKey();
+			}
+			else { //SOLUTION SAYS 90
+				true_positive_90++;
+			}
 		}
-		else { //SOLUTION SAYS 90
-			true_positive_90++;
+		else { // WE SAY NOT 90
+			if (oplossing >= OUR_SPEED_90) { // SOLUTION SAYS 90
+											 //cout << "Oplossing: " << oplossing << " Verkeerd rejected\n";
+				false_negative_90++;
+				//waitKey();
+			}
+			else { //SOLUTION SAYS NOT 90
+				true_negative_90++;
+			}
+
+			if (aantal_pixels < INITIAL_THRESHOLD_70) { // WE SAY 70
+				if (oplossing >= 70) { // SOLUTION SAYS MORE THAN 70
+					true_positive_70++;
+				}
+				else { // SOLUTION SAYS LESS THAN 70
+					false_positive_70++;
+				}
+			}
+			else { //WE SAY LESS THAN 70
+				if (oplossing >= 70) { //SOLUTION SAYS MORE THAN 70
+					false_negative_70++;
+				}
+				else { // SOLUTION SAYS LESS THEN 70
+					true_negative_70++;
+				}
+
+			}
+
+			// NEED TO BE EXAMINED FURTHER
 		}
+		//file << is90;
+		file << endl;
+		//cout << "Rico: " << bepaal_rico_weg(mask) << endl;
 	}
-	else { // WE SAY NOT 90
-		if (oplossing >= OUR_MAX_SPEED) { // SOLUTION SAYS 90
-			//cout << "Oplossing: " << oplossing << " Verkeerd rejected\n";
-			false_negative_90++;
-			//waitKey();
-		}
-		else { //SOLUTION SAYS NOT 90
-			true_negative_90++;
-		}
-
-		// NEED TO BE EXAMINED FURTHER
-		bool goes_overboard = false;
-		Point x, y;
-		//cout << "Rico: " << bepaal_rico_weg(original_mask, x,y, goes_overboard);
-		//cin.get();
-
-
+	else {
+		cout << "went overboard" << endl;
 	}
-	//cout << "Rico: " << bepaal_rico_weg(mask) << endl;
+	
 	
 	
 }
@@ -188,11 +284,15 @@ string format(int num, int length) {
 
 int main()
 {
+	file.open("../../../numbers.csv");
+	file << "aantal_pixels;oplossing" << endl;
 	vector<thread> draad;
-	for (int j = 1; j <= 4;j++) {
+	for (int j = 1; j <= 3;j++) {
 		string map_number = format(j,2);
 		cout << "MAP: " << j << endl;
-		string oplossing_file = "C:/Project_Computervisie/images/" + map_number + "/gtdistances.txt";
+		string oplossing_file = "../../../images/";
+		oplossing_file += map_number;
+		oplossing_file += "/gtdistances.txt";
 		ifstream in;
 		in.open(oplossing_file);
 
@@ -202,6 +302,7 @@ int main()
 		string filename = map + "/frame" + format(i,5);
 		Mat image = imread(filename + ".png");
 		while (!image.empty()) {
+			cout << i << " ";
 			int oplossing;
 			in >> oplossing;
 			in >> oplossing;
@@ -236,6 +337,11 @@ int main()
 	cout << "False positive 90: " << false_positive_90 << " SHOULD BE ZERO OR ELSE WE CRASH" << endl;
 	cout << "True negative 90: " << true_negative_90 << " WE WILL FURTHER EXAMINE THOSE" << endl;
 	cout << "False negative 90: " << false_negative_90 << " WE WILL FURTHER EXAMINE THOSE" << endl;
+	cout << "Total: " << true_positive_90 + true_negative_90 + false_negative_90 + false_positive_90 << endl;
+	cout << "True positive 70: " << true_positive_70 << " WE ARE CLASSIFYING THOSE WELL" << endl;
+	cout << "False positive 70: " << false_positive_70 << " SHOULD BE ZERO OR ELSE WE CRASH" << endl;
+	cout << "True negative 70: " << true_negative_70 << " WE WILL FURTHER EXAMINE THOSE" << endl;
+	cout << "False negative 70: " << false_negative_70 << " WE WILL FURTHER EXAMINE THOSE" << endl;
 	cout << "Total: " << true_positive_90 + true_negative_90 + false_negative_90 + false_positive_90 << endl;
 	cin.get();
 	
