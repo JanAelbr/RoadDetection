@@ -25,8 +25,96 @@ static int false_positive_70 = 0;
 static int true_positive_70 = 0;
 static int false_negative_70 = 0;
 static int true_negative_70 = 0;
-const bool USING_THREADS = false;
+const bool USING_THREADS = true;
+static int marge = 0;
+const int MIN_CONTOURS = 1;
 ofstream file;
+
+int geef_minimum_van_vvv(const vector<vector<Point>> &vvv, string maskname, string ext) {
+	int min_intensiteit=90;
+	int max_i = 0, max_j = 0;
+	Mat mask = imread(maskname + ext, CV_LOAD_IMAGE_GRAYSCALE);
+	for (int i = 0; i < vvv.size(); i++) {
+		if (vvv[i].size() > MIN_CONTOURS) {
+			for (int j = 0; j < vvv[i].size(); j++) {
+				if (mask.at<uchar>(vvv[i][j]) < min_intensiteit) {
+					min_intensiteit = (int)mask.at<uchar>(vvv[i][j]);
+					max_i = i;
+					max_j = j;
+				}
+			}
+		}	
+	}
+	return min_intensiteit;
+}
+
+int geef_maximum_intensiteit(string maskname, string ext) {
+	Mat mask = imread(maskname + ext, CV_LOAD_IMAGE_GRAYSCALE);
+	//imshow("Masker", mask);
+	//cout << mask.type() << endl;
+	//waitKey();
+	int max_intensiteit=0;
+	int max_i=0, max_j=0;
+	//cout << "Intensiteit: " << (int)mask.at<uchar>(403, 567) << endl;
+	for (int i = 0; i < mask.rows-1 ; i++) {
+		for (int j = 0; j < mask.cols-1; j++) {
+			if (mask.at<uchar>(i, j) > max_intensiteit) {
+				max_intensiteit = (int)mask.at<uchar>(i, j);
+				max_i = i;
+				max_j = j;
+				//cout << "i: " << i << "\tj: " << j << "\t Intensiteit: " << (int)mask.at<uchar>(i, j) << endl;
+			}
+		}
+	}
+	return max_intensiteit;
+}
+
+Mat no_white_planes(String filename, String ext, String maskname) {
+
+	Mat mask = imread(maskname + ext, CV_LOAD_IMAGE_UNCHANGED);
+	threshold(mask, mask, 1, 255, 0);
+
+	Mat color, image2, blurred, gray;
+	color = imread(filename + ext, CV_LOAD_IMAGE_ANYCOLOR);
+	gray = imread(filename + ext, CV_LOAD_IMAGE_GRAYSCALE);
+	//imshow("gray", gray);
+
+	medianBlur(color, blurred, 221);
+	//threshold(color, image2, 130, 255, THRESH_BINARY);
+	threshold(gray, image2, 140, 255, THRESH_BINARY);
+	//imshow("image2", image2);
+
+	Mat grayC3;
+	Mat input[] = { image2, image2, image2 };
+	merge(input, 3, grayC3);
+
+	Mat top = color - grayC3;
+
+	Mat tmp, alpha;
+	cvtColor(top, tmp, CV_BGR2GRAY);
+	threshold(tmp, alpha, 1, 255, THRESH_BINARY_INV);
+
+	Mat merged;
+	Mat in[] = { alpha, alpha, alpha };
+	merge(in, 3, merged);
+	merged = merged / 255;
+
+	Mat mult;
+	multiply(merged, blurred, mult);
+
+	Mat end = mult + top;
+
+	Mat final;
+	GaussianBlur(end, final, Size(7, 7), 1);
+
+	Mat canny;
+	Canny(final, canny, 50, 150);
+	//imshow("canny", canny);
+	Mat cutout_image;
+	//cout << endl << canny.type() << endl << mask.type();
+	bitwise_and(canny, mask, cutout_image);
+	return cutout_image;
+}
 
 bool goes_overboard(string maskname) {
 	Mat mask = imread(maskname, CV_LOAD_IMAGE_UNCHANGED);
@@ -147,14 +235,14 @@ double bepaal_rico_weg(Mat m, Point & p1, Point & p2) {
 };
 
 void print_enkel_mask(string filename, string maskname, string ext, string number, int oplossing) {
-	if (!goes_overboard(maskname + ext)) {
+	/*if (!goes_overboard(maskname + ext)) {*/
 		int THRESHOLD_90 = INITIAL_THRESHOLD_90;
 		Mat image, mask;	//read image
 		image = imread(filename + ext, CV_LOAD_IMAGE_COLOR);
 		mask = imread(maskname + ext, CV_LOAD_IMAGE_COLOR);
 		//imshow("original", image + mask);
-		Mat M = Mat::ones(10, 20, CV_32F);
-		dilate(mask, mask, M);
+		//Mat M = Mat::ones(30, 60, CV_32F);
+		//dilate(mask, mask, M);
 		//imshow("new mask", image + mask);
 		//waitKey();
 
@@ -193,38 +281,71 @@ void print_enkel_mask(string filename, string maskname, string ext, string numbe
 		//imshow("mask", mask);
 		//waitKey();
 
+		cannied_masked_image = no_white_planes(filename, ext, maskname);
 
-		
-
-		//vector<vector<Point> > contours;
-		//vector<Vec4i> hierarchy;
+		vector<vector<Point> > contours;
+		vector<Vec4i> hierarchy;
 		//imshow("Final Image before", cannied_masked_image);
-		//findContours(cannied_masked_image, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
-		//Scalar color(255,255,255);
-		//for (int i = 0; i < contours.size();i++) {
-		//	if (contours[i].size() > 100) {
-		//		drawContours(cannied_masked_image, contours, i, color, CV_FILLED, 8, hierarchy);
-		//	}
-		//}
+		findContours(cannied_masked_image, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+		Mat image_contours = Mat::zeros(cannied_masked_image.rows, cannied_masked_image.cols, CV_32F);
+		Scalar color(255,255,255);
+		bool found = false;
+		for (int i = 0; i < contours.size();i++) {
+			if (contours[i].size() > MIN_CONTOURS) {
+				drawContours(image_contours, contours, i, color, 1, 8, hierarchy);
+				found = true;
+			}
+		}
+		int snelheid = 0;
+		//imshow("original mask", original_mask);
+		//waitKey();
+		if (found) {
+			//imshow("Ewouds canny", cannied_masked_image);
+			//imshow("Ewouds canny contoured", image_contours);
+			//imshow("Original", image + original_mask);
+			//waitKey();
+			snelheid = geef_minimum_van_vvv(contours, maskname, ext);
+			snelheid = snelheid - 5;
+		}
+		else {
+			snelheid = geef_maximum_intensiteit(maskname, ext);
+		}
+		//cout << filename << ":" << snelheid << "\t" << oplossing << endl;
+		//cin.get();
+		if (snelheid > oplossing) {
+			//cout << "FOUT";
+			if (marge < snelheid - oplossing) {
+				marge = snelheid - oplossing;
+			}
+		}
+		file << filename << ";" << snelheid - oplossing << ";" << snelheid << ";" << oplossing << endl;
+		//Point minimum = geef_minimum_van_vvv(contours);
+		//cout << "Type:" << original_mask.type();
+		//cout << "x: " << minimum.x << "\ty: " << endl;
+		//cout << filename << ":" << original_mask.at<uchar>(minimum) << endl;
+
+
+
+
 
 		vector<Mat> channels;
 		split(cannied_masked_image, channels);
 		Scalar m = mean(channels[0]);
 		double aantal_pixels = m[0] * cannied_masked_image.rows * cannied_masked_image.cols / 255;
 
-
-		//imshow("Final Image after", cannied_masked_image);
+		//imshow("Original", image + original_mask);
+		//imshow("Final Image after", image_contours);
 		//cout << "Aantal pixels: " << aantal_pixels << endl;
-		waitKey();
+		//waitKey();
 
-		file << aantal_pixels << ";" << oplossing << ";";
+		//file << aantal_pixels << ";" << oplossing << ";";
 
 		if (aantal_pixels <= THRESHOLD_90) { // WE SAY 90
 			if (oplossing < OUR_SPEED_90) { // SOLUTION SAYS NOT 90
 											//cout << "Oplossing : " << oplossing << " Verkeerd toegelaten\n";
 											//cout << "Oplossing: " << oplossing << "\tAantal pixels: " << aantal_pixels << " File: " << filename << "Threshold: " << THRESHOLD_90 << endl;
 				string windowname = filename;
-				imshow(filename, cannied_masked_image);
+				//imshow(filename, cannied_masked_image);
 				false_positive_90++; // SHOULD BE ZERO OR ELSE WE CRASH
 
 				waitKey();
@@ -264,12 +385,12 @@ void print_enkel_mask(string filename, string maskname, string ext, string numbe
 			// NEED TO BE EXAMINED FURTHER
 		}
 		//file << is90;
-		file << endl;
+		//file << endl;
 		//cout << "Rico: " << bepaal_rico_weg(mask) << endl;
-	}
+	/*}
 	else {
 		cout << "went overboard" << endl;
-	}
+	}*/
 	
 	
 	
@@ -285,9 +406,10 @@ string format(int num, int length) {
 int main()
 {
 	file.open("../../../numbers.csv");
-	file << "aantal_pixels;oplossing" << endl;
+	//file << "aantal_pixels;oplossing" << endl;
+	file << "filename;marge;snelheid;oplossing" << endl;
 	vector<thread> draad;
-	for (int j = 1; j <= 3;j++) {
+	for (int j = 1; j <= 1;j++) {
 		string map_number = format(j,2);
 		cout << "MAP: " << j << endl;
 		string oplossing_file = "../../../images/";
@@ -333,16 +455,17 @@ int main()
 
 	
 	cout << endl;
-	cout << "True positive 90: " << true_positive_90 << " WE ARE CLASSIFYING THOSE WELL" << endl;
-	cout << "False positive 90: " << false_positive_90 << " SHOULD BE ZERO OR ELSE WE CRASH" << endl;
-	cout << "True negative 90: " << true_negative_90 << " WE WILL FURTHER EXAMINE THOSE" << endl;
-	cout << "False negative 90: " << false_negative_90 << " WE WILL FURTHER EXAMINE THOSE" << endl;
-	cout << "Total: " << true_positive_90 + true_negative_90 + false_negative_90 + false_positive_90 << endl;
-	cout << "True positive 70: " << true_positive_70 << " WE ARE CLASSIFYING THOSE WELL" << endl;
-	cout << "False positive 70: " << false_positive_70 << " SHOULD BE ZERO OR ELSE WE CRASH" << endl;
-	cout << "True negative 70: " << true_negative_70 << " WE WILL FURTHER EXAMINE THOSE" << endl;
-	cout << "False negative 70: " << false_negative_70 << " WE WILL FURTHER EXAMINE THOSE" << endl;
-	cout << "Total: " << true_positive_90 + true_negative_90 + false_negative_90 + false_positive_90 << endl;
+	//cout << "True positive 90: " << true_positive_90 << " WE ARE CLASSIFYING THOSE WELL" << endl;
+	//cout << "False positive 90: " << false_positive_90 << " SHOULD BE ZERO OR ELSE WE CRASH" << endl;
+	//cout << "True negative 90: " << true_negative_90 << " WE WILL FURTHER EXAMINE THOSE" << endl;
+	//cout << "False negative 90: " << false_negative_90 << " WE WILL FURTHER EXAMINE THOSE" << endl;
+	//cout << "Total: " << true_positive_90 + true_negative_90 + false_negative_90 + false_positive_90 << endl;
+	//cout << "True positive 70: " << true_positive_70 << " WE ARE CLASSIFYING THOSE WELL" << endl;
+	//cout << "False positive 70: " << false_positive_70 << " SHOULD BE ZERO OR ELSE WE CRASH" << endl;
+	//cout << "True negative 70: " << true_negative_70 << " WE WILL FURTHER EXAMINE THOSE" << endl;
+	//cout << "False negative 70: " << false_negative_70 << " WE WILL FURTHER EXAMINE THOSE" << endl;
+	//cout << "Total: " << true_positive_90 + true_negative_90 + false_negative_90 + false_positive_90 << endl;
+	cout << "Marge: " << marge << endl;
 	cin.get();
 	
     return 0;
