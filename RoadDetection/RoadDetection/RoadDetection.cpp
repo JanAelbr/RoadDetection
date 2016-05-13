@@ -29,6 +29,8 @@ const bool USING_THREADS = true;
 static int marge = 0;
 const int MIN_CONTOURS = 1;
 ofstream file;
+ofstream results;
+vector<string> oplossingen;
 
 int geef_minimum_van_vvv(const vector<vector<Point>> &vvv, string maskname, string ext) {
 	int min_intensiteit=90;
@@ -90,17 +92,10 @@ Mat no_white_planes(String filename, String ext, String maskname) {
 
 	Mat top = color - grayC3;
 
-	Mat tmp, alpha;
-	cvtColor(top, tmp, CV_BGR2GRAY);
-	threshold(tmp, alpha, 1, 255, THRESH_BINARY_INV);
-
-	Mat merged;
-	Mat in[] = { alpha, alpha, alpha };
-	merge(in, 3, merged);
-	merged = merged / 255;
+	grayC3 = grayC3 / 255;
 
 	Mat mult;
-	multiply(merged, blurred, mult);
+	multiply(grayC3, blurred, mult);
 
 	Mat end = mult + top;
 
@@ -108,7 +103,7 @@ Mat no_white_planes(String filename, String ext, String maskname) {
 	GaussianBlur(end, final, Size(7, 7), 1);
 
 	Mat canny;
-	Canny(final, canny, 50, 150);
+	Canny(final, canny, 20, 140);
 	//imshow("canny", canny);
 	Mat cutout_image;
 	//cout << endl << canny.type() << endl << mask.type();
@@ -243,8 +238,10 @@ void print_enkel_mask(string filename, string maskname, string ext, string numbe
 		//imshow("original", image + mask);
 		//Mat M = Mat::ones(30, 60, CV_32F);
 		//dilate(mask, mask, M);
-		//imshow("new mask", image + mask);
-		//waitKey();
+		/*if (number == "00033") {
+			imshow("new mask", image + mask);
+			waitKey();
+		}*/
 
 		//cout << mask << endl << endl;
 		Mat original_mask = mask.clone();
@@ -305,10 +302,16 @@ void print_enkel_mask(string filename, string maskname, string ext, string numbe
 			//imshow("Original", image + original_mask);
 			//waitKey();
 			snelheid = geef_minimum_van_vvv(contours, maskname, ext);
-			snelheid = snelheid - 5;
+			//snelheid = snelheid - 5;
 		}
 		else {
 			snelheid = geef_maximum_intensiteit(maskname, ext);
+		}
+		if (snelheid != 90) {
+			//snelheid -= 5;
+		}
+		if (snelheid < 30) {
+			snelheid = 30;
 		}
 		//cout << filename << ":" << snelheid << "\t" << oplossing << endl;
 		//cin.get();
@@ -319,6 +322,10 @@ void print_enkel_mask(string filename, string maskname, string ext, string numbe
 			}
 		}
 		file << filename << ";" << snelheid - oplossing << ";" << snelheid << ";" << oplossing << endl;
+		String hulp = number;
+		hulp += "\t";
+		hulp += to_string(snelheid);
+		oplossingen.push_back(hulp);
 		//Point minimum = geef_minimum_van_vvv(contours);
 		//cout << "Type:" << original_mask.type();
 		//cout << "x: " << minimum.x << "\ty: " << endl;
@@ -408,8 +415,9 @@ int main()
 	file.open("../../../numbers.csv");
 	//file << "aantal_pixels;oplossing" << endl;
 	file << "filename;marge;snelheid;oplossing" << endl;
+	results.open("../../../results.txt");
 	vector<thread> draad;
-	for (int j = 1; j <= 1;j++) {
+	for (int j = 4; j <= 4;j++) {
 		string map_number = format(j,2);
 		cout << "MAP: " << j << endl;
 		string oplossing_file = "../../../images/";
@@ -453,6 +461,10 @@ int main()
 		}
 	}
 
+	sort(oplossingen.begin(), oplossingen.end());
+	for (int i = 0; i < oplossingen.size();i++) {
+		results << oplossingen[i] << endl;
+	}
 	
 	cout << endl;
 	//cout << "True positive 90: " << true_positive_90 << " WE ARE CLASSIFYING THOSE WELL" << endl;
