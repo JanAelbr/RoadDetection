@@ -308,11 +308,11 @@ void print_enkel_mask(string filename, string maskname, string ext, string numbe
 			snelheid = geef_maximum_intensiteit(maskname, ext);
 		}
 		if (snelheid != 90) {
-			//snelheid -= 5;
+			snelheid -= 8;
 		}
-		if (snelheid < 30) {
+		/*if (snelheid < 30) {
 			snelheid = 30;
-		}
+		}*/
 		//cout << filename << ":" << snelheid << "\t" << oplossing << endl;
 		//cin.get();
 		if (snelheid > oplossing) {
@@ -417,17 +417,19 @@ int main()
 	file << "filename;marge;snelheid;oplossing" << endl;
 	results.open("../../../results.txt");
 	vector<thread> draad;
-	for (int j = 4; j <= 4;j++) {
+	for (int j = 3; j <= 3;j++) {
 		string map_number = format(j,2);
 		cout << "MAP: " << j << endl;
 		string oplossing_file = "../../../images/";
 		oplossing_file += map_number;
+		oplossing_file += "/01";
 		oplossing_file += "/gtdistances.txt";
 		ifstream in;
 		in.open(oplossing_file);
 
 		string map = "../../../images/";
 		map += map_number;
+		map += "/01";
 		int i = 0;
 		string filename = map + "/frame" + format(i,5);
 		Mat image = imread(filename + ".png");
